@@ -26,9 +26,9 @@ class simplemotordriver:
         self.integral_flag = False
         
 
-        #stop the motor
-        self.pwm1.duty(0)
-        self.pwm2.duty(0)    
+        #stop the motor hard
+        self.pwm1.duty(1023)
+        self.pwm2.duty(1023)    
 
         
     def encoder1_irq_handler(self, pin):
