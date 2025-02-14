@@ -1,35 +1,161 @@
+from machine import Pin, ADC, TouchPad
+import neopixel
+from time import sleep, ticks_ms
 from simplemotordriver import simplemotordriver
-from  Button import Button
-from time import sleep
-defaultspeed = 60
-speed = defaultspeed  # Make speed persistent
+import math
+class Diorama:
+    def __init__(self, button1_pin, button2_pin, speedup_pin, speeddown_pin, neo_pin, num_pix,
+                 encoder1_pin, encoder2_pin, in1_pin, in2_pin, wheel_size):
+        self.button1 = Pin(button1_pin, Pin.IN, Pin.PULL_UP)
+        self.button2 = Pin(button2_pin, Pin.IN, Pin.PULL_UP)
+        self.button1.irq(trigger=Pin.IRQ_FALLING, handler=self.button1_irq_handler)
+        self.button2.irq(trigger=Pin.IRQ_FALLING, handler=self.button2_irq_handler)
 
-disk = simplemotordriver(
-            encoder1_pin= 14,
-            encoder2_pin=12,
-            in1_pin=0,
-            in2_pin=4,
-            wheel_size=65,
-)
-
-buttons = Button(25, 26, 32, 33)#start/stop, generalpurpose, touchup, touchdown
-def setspeed():
-    global speed  # Ensure speed updates persistently
-    if buttons.gettouchup():
-        speed += 10
-    if buttons.gettouchdown():
-        speed -= 10
-    speed = max(0, min(speed, 250))  # Ensure speed is within 0-100
-    return speed
-
-for _ in range(200):
-    sleep(0.1)
-    if buttons.get_button1_state():#activate diorama
-        print('Activated - Speed:', speed)
-        disk.motgo(setspeed())
-    else:#stop diorama
-        print('stopped')
-        sleep(1)
-        disk.stophard()
+        self.stat1 = False
+        self.stat2 = False
+        self.speedup = TouchPad(Pin(speedup_pin))
+        self.speeddown = TouchPad(Pin(speeddown_pin))
+        self.last_interrupt_time1 = 0
+        self.last_interrupt_time2 = 0
+        self.debounce_time = 300  # 300 ms debounce time
         
+        self.speed = 60  # Default Speed
+        
+        # NeoPixel Strip Initialization
+        self.num_pix = num_pix
+        self.strip = neopixel.NeoPixel(Pin(neo_pin), num_pix)
+        self.set_leds(0, 0, 0)  # Turn off LEDs on start
+
+        # Motor Driver Setup from Arguments
+        self.disk = simplemotordriver(
+            encoder1_pin=encoder1_pin,
+            encoder2_pin=encoder2_pin,
+            in1_pin=in1_pin,
+            in2_pin=in2_pin,
+            wheel_size=wheel_size,
+        )
+
+    # ---- IRQ Handlers with Debounce ----
+    def button1_irq_handler(self, pin):
+        current_time = ticks_ms()
+        if current_time - self.last_interrupt_time1 > self.debounce_time:
+            self.last_interrupt_time1 = current_time
+            self.stat1 = not self.stat1  # Toggle state
+
+    def button2_irq_handler(self, pin):
+        current_time = ticks_ms()
+        if current_time - self.last_interrupt_time2 > self.debounce_time:
+            self.last_interrupt_time2 = current_time
+            self.stat2 = not self.stat2  # Toggle state
+
+    # ---- Button State Getters ----
+    def get_button1_state(self):
+        return self.stat1
+
+    def get_button2_state(self):
+        return self.stat2
+
+    # ---- Touch Sensor Handlers ----
+    def gettouchup(self):
+        return self.speedup.read() < 200
+
+    def gettouchdown(self):
+        return self.speeddown.read() < 200
+
+    # ---- LED Control ----
+    def set_leds(self, r, g, b):
+        for i in range(self.num_pix):
+            self.strip[i] = (r, g, b)
+        self.strip.write()
+    
+    def set_color(self, r, g, b):
+        """Set all pixels to the same color."""
+        for i in range(self.num_pix):
+            self.strip[i] = (r, g, b)
+        self.strip.write()
+    
+    def rainbow(self):
+        for color in range(255):
+            for pixel in range(self.num_pix):
+                pixel_index = (pixel * 256 // self.num_pix) + color * 5
+                self.strip[pixel] = self.colorwheel(pixel_index & 255)
+            self.strip.write()
+            sleep(0.001)
+    def heartbeat(self, r=255, g=0, b=0, fade_speed=0.1	):
+        """Creates a low-intensity slow fade-in and fade-out effect for NeoPixels."""
+        min_brightness = 0
+        max_brightness = 80  # Keep intensity low
+
+        # Fade in
+        for i in range(0, 100, 10):  # Steps of 10 for fewer iterations
+            intensity = int(max_brightness * (math.sin(math.radians(i))**2))
+            self.set_color(
+                int((r * intensity) / 255),
+                int((g * intensity) / 255),
+                int((b * intensity) / 255)
+            )
+            sleep(fade_speed)
+
+        # Fade out
+        for i in range(100, -1, -10):
+            intensity = int(max_brightness * (math.sin(math.radians(i))**2))
+            self.set_color(
+                int((r * intensity) / 255),
+                int((g * intensity) / 255),
+                int((b * intensity) / 255)
+            )
+            sleep(fade_speed)
+        
+    def colorwheel(self, color_value):
+        color_value = int(color_value) % 256
+        if color_value < 85:
+            return (255 - color_value * 3, color_value * 3, 0)
+        elif color_value < 170:
+            color_value -= 85
+            return (0, 255 - color_value * 3, color_value * 3)
+        else:
+            color_value -= 170
+            return (color_value * 3, 0, 255 - color_value * 3)
+
+    def stripup(self):
+        self.set_leds(0, 0, 0)
+        for i in range(self.num_pix):
+            self.strip[i] = (0, 255, 0)
+            self.strip.write()
+            sleep(0.05)
+            self.strip[i - 1] = (0, 0, 0)
+            self.strip.write()
+
+    def stripdown(self):
+        for i in range(self.num_pix - 1, -1, -1):
+            self.strip[i] = (255, 0, 0)
+            self.strip.write()
+            sleep(0.05)
+            self.strip[i] = (0, 0, 0)
+
+    # ---- Speed Control ----
+    def setspeed(self):
+        if self.gettouchup():
+            self.speed = min(250, self.speed + 10)
+            self.stripup()
+        if self.gettouchdown():
+            self.speed = max(0, self.speed - 10)
+            self.stripdown()
+        return self.speed
+
+    # ---- Run Function ----
+    def run(self):
+        if self.get_button1_state():
+            print('Activated - Speed:', self.speed)
+            self.disk.motgo(self.setspeed())
+            self.rainbow()
+        else:
+            print('Stopped')
+            self.heartbeat()  # Add heartbeat effect
+            self.disk.stophard()
+            sleep(1)
+
+    # ---- Go to a Specific Angle ----
+    def godeg(self, deg):
+        self.disk.godegreesp(deg, 1000, 1, 0, 0, 0, 0, plotflag=False)
 
