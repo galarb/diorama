@@ -80,8 +80,9 @@ class Diorama:
                 pixel_index = (pixel * 256 // self.num_pix) + color * 5
                 self.strip[pixel] = self.colorwheel(pixel_index & 255)
             self.strip.write()
-            sleep(0.001)
-    def heartbeat(self, r=255, g=0, b=0, fade_speed=0.1	):
+            sleep(0.0001) 
+
+    def heartbeat(self, r=255, g=0, b=0, fade_speed=0.1):
         """Creates a low-intensity slow fade-in and fade-out effect for NeoPixels."""
         min_brightness = 0
         max_brightness = 80  # Keep intensity low
@@ -106,23 +107,24 @@ class Diorama:
             )
             sleep(fade_speed)
         
-    def colorwheel(self, color_value):
-        color_value = int(color_value) % 256
-        if color_value < 85:
-            return (255 - color_value * 3, color_value * 3, 0)
-        elif color_value < 170:
-            color_value -= 85
-            return (0, 255 - color_value * 3, color_value * 3)
+    def colorwheel(self, pos):
+        """Returns an RGB color based on a 0-255 position on the color wheel."""
+        pos = pos % 256  # Ensure value is always between 0-255
+        if pos < 85:
+            return (255 - pos * 3, pos * 3, 0)  # Red → Green
+        elif pos < 170:
+            pos -= 85
+            return (0, 255 - pos * 3, pos * 3)  # Green → Blue
         else:
-            color_value -= 170
-            return (color_value * 3, 0, 255 - color_value * 3)
+            pos -= 170
+            return (pos * 3, 0, 255 - pos * 3)  # Blue → Red 
 
     def stripup(self):
         self.set_leds(0, 0, 0)
         for i in range(self.num_pix):
             self.strip[i] = (0, 255, 0)
             self.strip.write()
-            sleep(0.05)
+            sleep(0.01)
             self.strip[i - 1] = (0, 0, 0)
             self.strip.write()
 
@@ -130,7 +132,7 @@ class Diorama:
         for i in range(self.num_pix - 1, -1, -1):
             self.strip[i] = (255, 0, 0)
             self.strip.write()
-            sleep(0.05)
+            sleep(0.02)
             self.strip[i] = (0, 0, 0)
 
     # ---- Speed Control ----
@@ -148,12 +150,11 @@ class Diorama:
         if self.get_button1_state():
             print('Activated - Speed:', self.speed)
             self.disk.motgo(self.setspeed())
-            self.rainbow()
+            #self.rainbow()
         else:
             print('Stopped')
-            self.heartbeat()  # Add heartbeat effect
             self.disk.stophard()
-            sleep(1)
+            #self.heartbeat()  # Add heartbeat effect
 
     # ---- Go to a Specific Angle ----
     def godeg(self, deg):
