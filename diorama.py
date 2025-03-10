@@ -5,7 +5,7 @@ from simplemotordriver import simplemotordriver
 import math
 class Diorama:
     def __init__(self, button1_pin, button2_pin, speedup_pin, speeddown_pin, neo_pin, num_pix,
-                 encoder1_pin, encoder2_pin, in1_pin, in2_pin, wheel_size):
+                 encoder1_pin, encoder2_pin, in1b_pin, in2b_pin, in1d_pin, in2d_pin, wheel_size):
         self.button1 = Pin(button1_pin, Pin.IN, Pin.PULL_UP)
         self.button2 = Pin(button2_pin, Pin.IN, Pin.PULL_UP)
         self.button1.irq(trigger=Pin.IRQ_FALLING, handler=self.button1_irq_handler)
@@ -27,14 +27,22 @@ class Diorama:
         self.set_leds(0, 0, 0)  # Turn off LEDs on start
 
         # Motor Driver Setup from Arguments
-        self.disk = simplemotordriver(
+        self.base = simplemotordriver(
             encoder1_pin=encoder1_pin,
             encoder2_pin=encoder2_pin,
-            in1_pin=in1_pin,
-            in2_pin=in2_pin,
+            in1_pin=in1b_pin,
+            in2_pin=in2b_pin,
             wheel_size=wheel_size,
         )
-
+        self.disk = simplemotordriver(
+            encoder1_pin=2,
+            encoder2_pin=15,
+            in1_pin=in1d_pin,
+            in2_pin=in2d_pin,
+            wheel_size=wheel_size,
+        )
+        self.base.stophard()
+        self.disk.stophard()
     # ---- IRQ Handlers with Debounce ----
     def button1_irq_handler(self, pin):
         current_time = ticks_ms()
@@ -77,10 +85,10 @@ class Diorama:
     def rainbow(self):
         for color in range(255):
             for pixel in range(self.num_pix):
-                pixel_index = (pixel * 256 // self.num_pix) + color * 5
+                pixel_index = (pixel * 256 // self.num_pix) + color * 10
                 self.strip[pixel] = self.colorwheel(pixel_index & 255)
             self.strip.write()
-            sleep(0.0001) 
+            sleep(0.001) 
 
     def heartbeat(self, r=255, g=0, b=0, fade_speed=0.1):
         """Creates a low-intensity slow fade-in and fade-out effect for NeoPixels."""
@@ -129,6 +137,7 @@ class Diorama:
             self.strip.write()
 
     def stripdown(self):
+        self.set_leds(0, 0, 0)
         for i in range(self.num_pix - 1, -1, -1):
             self.strip[i] = (255, 0, 0)
             self.strip.write()
@@ -138,25 +147,29 @@ class Diorama:
     # ---- Speed Control ----
     def setspeed(self):
         if self.gettouchup():
-            self.speed = min(250, self.speed + 10)
+            self.speed = min(100, self.speed + 10)
             self.stripup()
         if self.gettouchdown():
             self.speed = max(0, self.speed - 10)
             self.stripdown()
+        print('speed= ',self.speed)
         return self.speed
 
     # ---- Run Function ----
     def run(self):
         if self.get_button1_state():
             print('Activated - Speed:', self.speed)
+            self.base.motgo(self.setspeed())
             self.disk.motgo(self.setspeed())
             #self.rainbow()
         else:
             print('Stopped')
-            self.disk.stophard()
+            self.base.stophard()
             #self.heartbeat()  # Add heartbeat effect
 
     # ---- Go to a Specific Angle ----
     def godeg(self, deg):
-        self.disk.godegreesp(deg, 1000, 1, 0, 0, 0, 0, plotflag=False)
+        self.base.godegreesp(deg, 1000, 1, 0, 0, 0, 0, plotflag=False)
+    def motgo(self, spee):
+        self.base.motgo(spee)
 
