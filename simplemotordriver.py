@@ -1,4 +1,4 @@
-from machine import Pin, PWM
+from machine import Pin, PWM, disable_irq, enable_irq
 import time 
 import math
 import random
@@ -8,15 +8,15 @@ recorded_valuesproc = []
 class simplemotordriver:
     def __init__(self, encoder1_pin, encoder2_pin, in1_pin, in2_pin, wheel_size):
         self.encoder1 = Pin(encoder1_pin, Pin.IN)
-        self.encoder1.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=self.encoder1_irq_handler)
+        #self.encoder1.irq(trigger=Pin.IRQ_FALLING, handler=self.encoder1_irq_handler)
         self.encoder2 = Pin(encoder2_pin, Pin.IN)
 
         self.in1 = Pin(in1_pin, Pin.OUT)
         self.in2 = Pin(in2_pin, Pin.OUT)
         self.pwm1 = PWM(self.in1)
         self.pwm2 = PWM(self.in2)
-        self.pwm1.freq(1000)
-        self.pwm2.freq(1000)
+        self.pwm1.freq(500)
+        self.pwm2.freq(500)
         self.wheel_size = wheel_size
         self.degrees = 0
         
@@ -29,23 +29,35 @@ class simplemotordriver:
         #stop the motor hard
         self.pwm1.duty(1023)
         self.pwm2.duty(1023)    
+        self.encoder_tick = 0
+        self.last_irq_time = time.ticks_ms()
 
         
     def encoder1_irq_handler(self, pin):
-        encoder1_state = self.encoder1.value()
-        encoder2_state = self.encoder2.value()
+        current_time = time.ticks_ms()
+        if current_time - self.last_irq_time > 10:  # Increase debounce to 10ms
+            self.last_irq_time = current_time
+            self.encoder_tick = 1
+            encoder1_state = self.encoder1.value()
+            encoder2_state = self.encoder2.value()
+
+            if encoder1_state == encoder2_state:
+                self.degrees += 1
+            else:
+                self.degrees -= 1
+            
+            if self.degrees > 20000 or self.degrees < -20000:
+                print("Degrees reset")
+                self.degrees = 0
         
-        if encoder1_state == encoder2_state:
-            self.degrees += 1
-        else:
-            self.degrees -= 1
-        if self.degrees > 20000:
-            degrees = 0
-        #print("Degrees: ", self.degrees)
+
+        #print('Motor Degrees = ', self.degrees)
+
+
 
     def motgo(self, speed):
         pwm_value = int(min(max(abs(speed), 0), 100) * 10.23)  # Map -100 to 100 to 0 to 1023
-
+        #print('speed pwm value = ', pwm_value)
         if speed > 0:
             # Forward direction
             self.pwm1.duty(pwm_value)
@@ -98,7 +110,7 @@ class simplemotordriver:
         self.previous_time = current_time
 
         # Clamp output to motor limits
-        out = max(-254, min(254, out))
+        out = max(-100, min(100, out))
         #recorded_values.append(out)  # Record the value
 
         
@@ -114,7 +126,7 @@ class simplemotordriver:
     def godegrees(self, angle, times):
         for _ in range(times):
             motspeed = self.PIDcalc(angle, self.degrees, 1, 1, 0)
-            motspeed = max(-254, min(254, motspeed))  # Clamp the speed to [-254, 254]
+            motspeed = max(-100, min(100, motspeed))  # Clamp the speed to [-254, 254]
             self.motgo(motspeed)
     
     def test(self,times):
@@ -128,7 +140,7 @@ class simplemotordriver:
     def godegreesp(self, angle, times, kp, ki, kd, color, line_index, plotflag=True):
         for _ in range(times):
             motspeed = self.PIDcalc(angle, self.degrees, kp, ki, kd, color)
-            motspeed = max(-254, min(254, motspeed))
+            motspeed = max(-100, min(100, motspeed))
             self.motgo(motspeed)
             recorded_valuesproc.append(int(motspeed))
         self.stophard()
@@ -150,8 +162,8 @@ class simplemotordriver:
         dist_covered = (self.degrees * self.wheel_size * math.pi) / 360.0
 
         return dist_covered
+    
     def motang(self):
         return self.degrees
-    
     
 
