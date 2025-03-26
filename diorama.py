@@ -3,6 +3,7 @@ import neopixel
 from time import sleep, ticks_ms
 from simplemotordriver import simplemotordriver
 import math
+
 class Diorama:
     def __init__(self, button1_pin, button2_pin, speedup_pin, speeddown_pin, neo_pin, num_pix,
                  encoder1_pin, encoder2_pin, in1b_pin, in2b_pin, in1d_pin, in2d_pin, wheel_size):
@@ -43,6 +44,9 @@ class Diorama:
         )
         self.base.stophard()
         self.disk.stophard()
+        self.neobreak=False
+
+        self.stopcounter = 0
     # ---- IRQ Handlers with Debounce ----
     def button1_irq_handler(self, pin):
         current_time = ticks_ms()
@@ -146,13 +150,15 @@ class Diorama:
 
     # ---- Speed Control ----
     def setspeed(self):
+        global neobreak
+        neobreak = True
         if self.gettouchup():
             self.speed = min(100, self.speed + 10)
             self.stripup()
         if self.gettouchdown():
             self.speed = max(0, self.speed - 10)
             self.stripdown()
-        print('speed= ',self.speed)
+        #print('speed= ',self.speed)
         return self.speed
 
     # ---- Run Function ----
@@ -162,10 +168,16 @@ class Diorama:
             self.base.motgo(self.setspeed())
             self.disk.motgo(self.setspeed())
             #self.rainbow()
+            return self.speed
+
         else:
-            print('Stopped')
+            if(self.stopcounter % 500) == 0:
+                print('Stopped')
             self.base.stophard()
+            self.disk.stophard()
+            self.stopcounter += 1
             #self.heartbeat()  # Add heartbeat effect
+            return 0
 
     # ---- Go to a Specific Angle ----
     def godeg(self, deg):
